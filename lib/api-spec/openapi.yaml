@@ -3,13 +3,19 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Security Lab API - Gestión de Secretos y Escalamiento de Privilegios
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: users
+    description: User profile operations
+  - name: admin
+    description: Admin-only operations
 paths:
   /healthz:
     get:
@@ -24,7 +30,195 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error or email already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login and receive JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/profile:
+    get:
+      operationId: getProfile
+      tags: [users]
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/profile/unsafe:
+    put:
+      operationId: updateProfileUnsafe
+      tags: [users]
+      summary: Update profile (INSECURE - acepta cualquier campo del JSON, incluyendo rol)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdateUnsafe"
+      responses:
+        "200":
+          description: Profile updated (vulnerable version)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/profile/safe:
+    put:
+      operationId: updateProfileSafe
+      tags: [users]
+      summary: Update profile (SECURE - solo acepta campos permitidos)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdateSafe"
+      responses:
+        "200":
+          description: Profile updated (secure version)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "400":
+          description: Campo no permitido detectado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users:
+    get:
+      operationId: listAllUsers
+      tags: [admin]
+      summary: List all users (ADMIN only)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of all registered users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden - Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [admin]
+      summary: Get user statistics (ADMIN only)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Admin statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     HealthStatus:
       type: object
@@ -34,3 +228,99 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        mensaje:
+          type: string
+        campo:
+          type: ["string", "null"]
+      required:
+        - mensaje
+
+    RegisterInput:
+      type: object
+      required: [nombre, correo, password]
+      properties:
+        nombre:
+          type: string
+          minLength: 2
+        correo:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+
+    LoginInput:
+      type: object
+      required: [correo, password]
+      properties:
+        correo:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [token, usuario]
+      properties:
+        token:
+          type: string
+        usuario:
+          $ref: "#/components/schemas/UserProfile"
+
+    UserProfile:
+      type: object
+      required: [id, nombre, correo, rol, createdAt]
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        correo:
+          type: string
+        rol:
+          type: string
+          enum: [USUARIO, ADMIN]
+        createdAt:
+          type: string
+          format: date-time
+
+    ProfileUpdateUnsafe:
+      type: object
+      properties:
+        nombre:
+          type: string
+        correo:
+          type: string
+        password:
+          type: string
+        rol:
+          type: string
+        estado:
+          type: string
+        permisos:
+          type: string
+
+    ProfileUpdateSafe:
+      type: object
+      properties:
+        nombre:
+          type: string
+        correo:
+          type: string
+        password:
+          type: string
+
+    AdminStats:
+      type: object
+      required: [totalUsuarios, totalAdmins, registrosRecientes]
+      properties:
+        totalUsuarios:
+          type: integer
+        totalAdmins:
+          type: integer
+        registrosRecientes:
+          type: integer
