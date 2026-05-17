@@ -1,3 +1,11 @@
+import { config } from "dotenv";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+
+// Carga el .env desde la raíz del proyecto (funciona local y en Replit)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+config({ path: resolve(__dirname, "../../.env") });
+
 import app from "./app";
 import { logger } from "./lib/logger";
 
